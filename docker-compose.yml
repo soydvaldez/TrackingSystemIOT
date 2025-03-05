@@ -1,6 +1,18 @@
 version: '3.8'
 
+networks:
+  app-net:
+   name: app-net
+   driver: bridge
+
+  kong-net:
+    name: kong-net
+    driver: bridge
+  
+  # microservices-net:
+
 services:
+  # Capa: Balanceador de carga
   load-balancer-service:
     build:
       context: ./infraestructure/load-balancer-service/
@@ -11,12 +23,202 @@ services:
       - "80:80"
     restart: always 
     networks:
-      virtual_network:
-        ipv4_address: 173.18.0.4
-    depends_on:
-      - api-gateway-service1
-      - api-gateway-service2
+      - kong-net
+      # virtual_network:
+      #   ipv4_address: 173.18.0.4
+    # depends_on:
+    #   - api-gateway-service1
+    #   - api-gateway-service2
 
+  # Capa: Puerta de Enlace (Gateway)
+  kong-db:
+    image: localhost:5000/kong-db:1.0.0
+    container_name: kong-db
+    networks:
+      - kong-net
+    ports:
+      - 15432:5432
+    environment:
+      POSTGRES_DB: kong
+      POSTGRES_USER: kong
+      POSTGRES_PASSWORD: kong
+    # volumes:
+    #   - db-data-kong-postgres:/var/lib/postgresql/data
+
+  kong-migration:
+    image: kong
+    depends_on:
+      - kong-db
+    container_name: kong-migration
+    networks:
+      - kong-net
+    restart: on-failure
+    environment:
+      - KONG_DATABASE=postgres
+      - KONG_PG_HOST=kong-db
+      - KONG_PG_DATABASE=kong
+      - KONG_PG_USER=kong
+      - KONG_PG_PASSWORD=kong
+    command: kong migrations bootstrap
+    
+  kong:
+    image: kong
+    container_name: kong
+    environment:
+      - LC_CTYPE=en_US.UTF-8
+      - LC_ALL=en_US.UTF-8
+      - KONG_DATABASE=postgres
+      - KONG_PG_HOST=kong-db
+      - KONG_PG_USER=kong
+      - KONG_PG_PASSWORD=kong
+      - KONG_CASSANDRA_CONTACT_POINTS=kong-db
+      - KONG_PROXY_ACCESS_LOG=/dev/stdout
+      - KONG_ADMIN_ACCESS_LOG=/dev/stdout
+      - KONG_PROXY_ERROR_LOG=/dev/stderr
+      - KONG_ADMIN_ERROR_LOG=/dev/stderr
+      - KONG_ADMIN_LISTEN=0.0.0.0:8001, 0.0.0.0:8444 ssl
+    restart: on-failure
+    ports:
+      - 8000:8000
+      - 8443:8443
+      - 8001:8001
+      - 8444:8444
+    links:
+      - kong-db:kong-db
+    networks:
+      - kong-net
+      - app-net
+    depends_on:
+      - kong-db
+      - kong-migration
+
+  konga:
+    container_name: konga
+    image: pantsel/konga
+    links:
+      - kong:kong
+    depends_on:
+      - kong
+    networks:
+      - kong-net
+    ports:
+      - 1337:1337
+    environment:
+      - NODE_ENV=production
+  
+  # Capa de Seguridad (Autorizacion y Autenticacion)
+  keycloak-db:
+    container_name: keycloak-db
+    build:
+      context: ./infraestructure/keycloak-service/infra/
+      dockerfile: Dockerfile
+    image: localhost:5000/keycloak-db:1.0.0
+    networks:
+      - kong-net
+    ports:
+      - 5432
+    environment:
+      - PGDATA=/var/lib/postgresql/data
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_DB=keycloak
+
+  # Capa de Seguridad (Autorizacion y Autenticacion)
+  keycloak-service:
+    container_name: keycloak-service
+    build:
+      context: ./infraestructure/keycloak-service/service/
+      dockerfile: Dockerfile
+    image: localhost:5000/keycloak-service:1.0.0
+    networks:
+      - kong-net
+    ports:
+      - 9000:9000
+      - 8080:8080
+    environment:
+      - KEYCLOAK_ADMIN=admin 
+      - KEYCLOAK_ADMIN_PASSWORD=admin
+      - KC_DB=postgres
+      - KC_DB_URL=jdbc:postgresql://keycloak-db:5432/keycloak
+      - KC_DB_USERNAME=postgres
+      - KC_DB_PASSWORD=postgres
+      - KC_HOSTNAME=192.168.1.68
+      - KC_HOSTNAME_URL="http://192.168.1.68/auth" 
+      - KC_PROXY=edge 
+    command: ["start-dev"]
+  
+  eureka-server-service:
+    build:
+      context: ./infraestructure/EurekaServerService/
+      dockerfile: Dockerfile
+    ports:
+      - 8761:8761
+    networks:
+      - app-net
+    environment:
+      - SPRING_PROFILES_ACTIVE=default
+
+  # Capa de bus eventos
+  rabbitmq-broker-service:
+    build:
+      context: ./infraestructure/rabbitmq-broker-service/
+      dockerfile: Dockerfile
+    image: localhost:5000/rabbitmq-broker-service:1.0.0
+    container_name: rabbitmq-broker-service
+    deploy:
+      resources:
+        limits:
+          cpus: "2.0"
+          memory: "4G"
+    ports:
+      - 5672:5672
+      - 15672:15672
+    networks:
+      - app-net
+      # virtual_network:
+      #   ipv4_address: 173.18.0.5
+    environment:
+      - RABBITMQ_DEFAULT_USER=guest
+      - RABBITMQ_DEFAULT_PASS=guest
+    # volumes:
+      # - /Users/daniel/workspace/io.tracksystem/servers/rabbitmq/volume/data:/var/lib/rabbitmq
+      # - /Users/daniel/workspace/io.tracksystem/servers/rabbitmq/volume/logs:/var/log/rabbitmq
+
+  # api-gateway-service1:
+  #   build:
+  #     context: ./services/api-gateway-service
+  #     dockerfile: Dockerfile
+  #   image: localhost:5000/api-gateway-service:1.0.0
+  #   container_name: api-gateway-service1
+  #   ports:
+  #     - "8080:8080"
+  #   networks:
+  #     virtual_network:
+  #       ipv4_address: 173.18.0.12
+  #   environment: 
+  #     - SPRING_PROFILES_ACTIVE=prod
+  #   depends_on:
+  #     - sensor-manager-service
+  #     - sensor-ingest-service
+
+  # api-gateway-service2:
+  #   build:
+  #     context: ./services/api-gateway-service
+  #     dockerfile: Dockerfile
+  #   image: localhost:5000/api-gateway-service:1.0.0
+  #   container_name: api-gateway-service2
+  #   ports:
+  #     - "8081:8080"
+  #   networks:
+  #     virtual_network:
+  #       ipv4_address: 173.18.0.11
+  #   environment: 
+  #     - SPRING_PROFILES_ACTIVE=prod
+  #   depends_on:
+  #     - sensor-manager-service
+  #     - sensor-ingest-service
+
+  # Proceso: Gestion de sensores
   postgres-service:
     build:
       context: ./infraestructure/postgres-service/
@@ -33,97 +235,24 @@ services:
       POSTGRES_DB: mydatabase
       PGDATA: /var/lib/postgresql/data/pgdata
     ports:
-      - "5432:5432"
+      - 5432:5432
     networks:
-      virtual_network:
-            ipv4_address: 173.18.0.2
-
-  mongo-service:
-    build:
-      context: ./infraestructure/mongo-service/
-      dockerfile: Dockerfile
-    image: localhost:5000/mongo-service:1.0.0
-    container_name: mongo-service
-    ports:
-      - "27017:27017"
-    networks:
-      virtual_network:
-        ipv4_address: 173.18.0.3
-    environment:
-      - MONGO_INITDB_ROOT_USERNAME=admin
-      - MONGO_INITDB_ROOT_PASSWORD=admin
-    # volumes:
-      # - mongo-data:/data/db
-
-  rabbitmq-broker-service:
-    build:
-      context: ./infraestructure/rabbitmq-broker-service/
-      dockerfile: Dockerfile
-    image: localhost:5000/rabbitmq-broker-service:1.0.0
-    container_name: rabbitmq-broker-service
-    deploy:
-      resources:
-        limits:
-          cpus: "2.0"
-          memory: "4G"
-    ports:
-      - "5672:5672"
-      - "15672:15672"
-    networks:
-      virtual_network:
-        ipv4_address: 173.18.0.5
-    environment:
-      - RABBITMQ_DEFAULT_USER=guest
-      - RABBITMQ_DEFAULT_PASS=guest
-    # volumes:
-      # - /Users/daniel/workspace/io.tracksystem/servers/rabbitmq/volume/data:/var/lib/rabbitmq
-      # - /Users/daniel/workspace/io.tracksystem/servers/rabbitmq/volume/logs:/var/log/rabbitmq
-
-  api-gateway-service1:
-    build:
-      context: ./services/api-gateway-service
-      dockerfile: Dockerfile
-    image: localhost:5000/api-gateway-service:1.0.0
-    container_name: api-gateway-service1
-    ports:
-      - "8080:8080"
-    networks:
-      virtual_network:
-        ipv4_address: 173.18.0.12
-    environment: 
-      - SPRING_PROFILES_ACTIVE=prod
-    depends_on:
-      - sensor-manager-service
-      - sensor-ingest-service
-
-  api-gateway-service2:
-    build:
-      context: ./services/api-gateway-service
-      dockerfile: Dockerfile
-    image: localhost:5000/api-gateway-service:1.0.0
-    container_name: api-gateway-service2
-    ports:
-      - "8081:8080"
-    networks:
-      virtual_network:
-        ipv4_address: 173.18.0.11
-    environment: 
-      - SPRING_PROFILES_ACTIVE=prod
-    depends_on:
-      - sensor-manager-service
-      - sensor-ingest-service
+      - app-net
+      # virtual_network:
+      #       ipv4_address: 173.18.0.2
 
   sensor-manager-service:
     build:
       context: ./services/sensor-manager-service
       dockerfile: Dockerfile
-    image: localhost:5000/sensor-manager-service:1.0.0
+    image: localhost:5000/sensor-manager-img:1.0.0
     container_name: sensor-manager-service
     ports:
-      - "8002:8080"
+      - 8002:8080
     networks:
-      virtual_network:
-        ipv4_address: 173.18.0.10
+      - app-net
+      # virtual_network:
+      #   ipv4_address: 173.18.0.10
     environment:
       - SERVER_PORT=8080
       - SPRING_RABBITMQ_HOST=rabbitmq-broker-service
@@ -134,21 +263,66 @@ services:
       - SPRING_DATASOURCE_URL=jdbc:postgresql://postgres-service:5432/mydatabase
       - SPRING_DATASOURCE_USERNAME=postgres
       - SPRING_DATASOURCE_PASSWORD=postgres
+      - SPRING_PROFILES_ACTIVE=dev
+      - EUREKA_CLIENT_SERVICEURL_DEFAULTZONE=http://eureka-server-service:8761/eureka/
     depends_on:
       - rabbitmq-broker-service
       - postgres-service
-
+      - eureka-server-service
+  
+  # Proceso: Ingesta y limpieza de datos.
   sensor-ingest-service:
     build:
       context: ./services/sensor-ingest-service
       dockerfile: Dockerfile
-    image: localhost:5000/sensor-ingest-service:1.0.0
+    image: localhost:5000/sensor-ingest-img:1.0.0
     container_name: sensor-ingest-service
     ports:
-      - "8000:8080"
+      - 8080
     networks:
-      virtual_network:
-        ipv4_address: 173.18.0.7
+      - app-net
+      # virtual_network:
+      #   ipv4_address: 173.18.0.7
+    environment:
+      - SPRING_PROFILES_ACTIVE=dev
+      - SERVER_PORT=8080
+      - SPRING_RABBITMQ_HOST=rabbitmq-broker-service
+      - SPRING_RABBITMQ_PORT=5672
+      - SPRING_RABBITMQ_USERNAME=guest
+      - SPRING_RABBITMQ_PASSWORD=guest
+      - EUREKA_CLIENT_SERVICEURL_DEFAULTZONE=http://eureka-server-service:8761/eureka/
+    depends_on:
+      - rabbitmq-broker-service
+
+  # Proceso: Persistencia de datos.
+  mongo-service:
+    build:
+      context: ./infraestructure/mongo-service/
+      dockerfile: Dockerfile
+    image: localhost:5000/mongo-service:1.0.0
+    container_name: mongo-service
+    ports:
+      - 27017:27017
+    networks:
+      - app-net
+      # virtual_network:
+      #   ipv4_address: 173.18.0.3
+    environment:
+      - MONGO_INITDB_ROOT_USERNAME=admin
+      - MONGO_INITDB_ROOT_PASSWORD=admin
+    # volumes:
+      # - ./infraestructure/mongo-service/mongo-data:/data/db
+
+  sensor-storage-service:
+    build:
+      context: ./services/sensor-storage-service
+      dockerfile: Dockerfile
+    image: localhost:5000/sensor-storage-img:1.0.0
+    container_name: sensor-storage-service
+    networks:
+      - app-net
+      # virtual_network:
+      #   ipv4_address: 173.18.0.8
     environment:
       - SPRING_PROFILES_ACTIVE=default
       - SERVER_PORT=8080
@@ -156,25 +330,8 @@ services:
       - SPRING_RABBITMQ_PORT=5672
       - SPRING_RABBITMQ_USERNAME=guest
       - SPRING_RABBITMQ_PASSWORD=guest
-    depends_on:
-      - rabbitmq-broker-service
-
-  sensor-storage-service:
-    build:
-      context: ./services/sensor-storage-service
-      dockerfile: Dockerfile
-    image: localhost:5000/sensor-storage-service:1.0.0
-    container_name: sensor-storage-service
-    networks:
-      virtual_network:
-        ipv4_address: 173.18.0.8
-    environment:
-      - SPRING_PROFILES_ACTIVE=dev
-      - SPRING_RABBITMQ_HOST=rabbitmq-broker-service
-      - SPRING_RABBITMQ_PORT=5672
-      - SPRING_RABBITMQ_USERNAME=guest
-      - SPRING_RABBITMQ_PASSWORD=guest
       - SPRING_DATA_MONGODB_URI=mongodb://usertest:usertest@mongo-service:27017/trackingsystem
+      - EUREKA_CLIENT_SERVICEURL_DEFAULTZONE=http://eureka-server-service:8761/eureka/
     depends_on:
       - rabbitmq-broker-service
       - mongo-service
@@ -183,12 +340,4 @@ volumes:
   mongo-data:
   rabbitmq-data:
   postgres-data:
-  
-networks:
-  virtual_network:
-    name: portafolio_virtual_network
-    driver: bridge
-    ipam:
-      config:
-        - subnet: 173.18.0.0/16
-          gateway: 173.18.0.1
+  db-data-kong-postgres:
