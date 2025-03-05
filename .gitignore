@@ -42,3 +42,15 @@ out/
 
 /services/*
 !/services/*.sh
+
+
+infraestructure/keycloak-service/infra/data
+infraestructure/gitlab
+
+.DS_Store
+
+process.txt
+
+certs
+
+volumes/
