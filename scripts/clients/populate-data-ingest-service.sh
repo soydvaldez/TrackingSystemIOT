@@ -20,7 +20,8 @@ TAGS=("1.0.0" "latest")
 
 # Simula y genera una temperatura de un sensor, arma una peticion cURL y manda datos al servidor
 function producer_sensor_temperature {
-  URL=http://${HOST}/api/v1/ingestdata;
+  # URL=http://${HOST}/api/v1/ingestdata;
+  URL=http://localhost:80/api/v1/ingestdata;
   # JSON=''
 
   function generate_data {
