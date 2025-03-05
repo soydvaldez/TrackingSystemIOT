@@ -1,9 +1,13 @@
 FROM mongo:latest
 
-COPY ./config/mongod.conf /etc/mongo/mongod.conf
-COPY ./config/createUser.js /docker-entrypoint-initdb.d/
-# Aqui define el archivo de configuraciones
-RUN apt-get update && apt-get install jq
+# Copiar la configuración en la ubicación correcta
+COPY ./config/mongod.conf /etc/mongod.conf
 
+# Copiar scripts de inicialización
+COPY ./config/init.js /docker-entrypoint-initdb.d/init.js
+
+# Exponer el puerto de MongoDB
 EXPOSE 27017
-# ENTRYPOINT ["mongod"]
+
+# Comando para iniciar Mongo con el archivo de configuración
+CMD ["mongod"]

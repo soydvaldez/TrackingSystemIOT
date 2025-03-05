@@ -17,19 +17,27 @@ echo "Datasource URL: \"$\""
 echo "Profile active: \"$PROFILES_ACTIVE\""
 echo
 
+
+function mountData() {
+  if [[ -d "data" ]]; then
+   mkdir data
+  fi
+}
+
 # Levanta un contenedor: sobreescribe la URI de PostgreSQL y RabbitMQ, variables de entorno.
 function run-container() {
+  # mountData
   echo "Levantando el contenedor: $IMAGE_NAME"
-  echo "params: MONGO_INITDB_ROOT_USERNAME:${MONGO_INITDB_ROOT_USERNAME}      MONGO_INITDB_ROOT_PASSWORD=${MONGO_INITDB_ROOT_PASSWORD}"
+  echo "params: MONGO_INITDB_ROOT_USERNAME:${MONGO_INITDB_ROOT_USERNAME} MONGO_INITDB_ROOT_PASSWORD=${MONGO_INITDB_ROOT_PASSWORD}"
   echo
-  docker run --restart always -d \
+  docker run \
     --name "${IMAGE_NAME}" \
-    --network portafolio_virtual_network \
+    --network app-net \
     -p $PORT:$PORT \
     -e MONGO_INITDB_ROOT_USERNAME=${MONGO_INITDB_ROOT_USERNAME} \
     -e MONGO_INITDB_ROOT_PASSWORD=${MONGO_INITDB_ROOT_PASSWORD} \
+    --rm \
     localhost:5000/"${IMAGE_NAME}":1.0.0
-
 }
 
 stop-container() {
@@ -41,8 +49,8 @@ stop-container() {
 
 # This ensures the following code only runs when the script is executed directly
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
-  echo "This is outside any function."
-  # start container
-  # run-container
+  # echo "This is outside any function."
+  # Deploy Container
+  run-container
 fi
 
