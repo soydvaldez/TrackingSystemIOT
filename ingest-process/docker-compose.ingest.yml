@@ -1,0 +1,58 @@
+version: '3.8'
+
+networks:
+  app-net:
+   name: app-net
+   driver: bridge
+
+  kong-net:
+    name: kong-net
+    driver: bridge
+
+services:
+  sensor-ingest-service:
+    build:
+      context: ./IngestionService/service/
+      dockerfile: Dockerfile
+    image: localhost:5000/sensor_ingest_process:1.0.0
+    container_name: sensor-ingestion-service
+    ports:
+      - 8080
+    networks:
+      - app-net
+    environment:
+      SPRING_PROFILES_ACTIVE: dev
+      SERVER_PORT: 8080
+      SPRING_RABBITMQ_HOST: rabbitmq-broker-service
+      SPRING_RABBITMQ_PORT: 5672
+      SPRING_RABBITMQ_USERNAME: guest
+      SPRING_RABBITMQ_PASSWORD: guest
+      EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://eureka-server-service:8761/eureka/
+      SPRING_DATASOURCE_URL: jdbc:postgresql://sensor-ingestion-db:5432/lectures
+      SPRING_DATASOURCE_USERNAME: postgres
+      SPRING_DATASOURCE_PASSWORD: postgres
+      SPRING_JPA_HIBERNATE_DDL: AUTO=update
+      SPRING_JPA_PROPERTIES_HIBERNATE_DIALECT: org.hibernate.dialect.PostgreSQLDialect
+    depends_on:
+      - sensor-ingestion-db
+      # - rabbitmq-broker-service
+
+  sensor-ingestion-db:
+    # context: ./IngestionService/infra/
+    image: postgres:17-alpine
+    networks:
+      - app-net
+    environment:
+      POSTGRES_USER: postgres         # Usuario de la base de datos
+      POSTGRES_PASSWORD: postgres     # Contraseña del usuario
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./IngestionService/infra/db/init.sql:/docker-entrypoint-initdb.d/init.sql
+    ports:
+      - 5435:5432
+
+volumes:
+  pgdata:
+    # Proceso de ingesta
+
+  # Proceso: Ingesta y limpieza de datos.
