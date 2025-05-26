@@ -1,0 +1,163 @@
+version: "3.8"
+
+networks:
+  app-net:
+    name: app-net
+    driver: bridge
+
+  kong-net:
+    name: kong-net
+    driver: bridge
+
+services:
+  # Capa: Balanceador de carga
+  load-balancer-service:
+    build:
+      context: ./infraestructure/load-balancer-service/
+      dockerfile: Dockerfile
+    image: localhost:5000/load-balancer-service:1.0.0
+    container_name: load-balancer-service
+    ports:
+      - "80:80"
+    restart: always 
+    networks:
+      - kong-net
+      # virtual_network:
+      #   ipv4_address: 173.18.0.4
+    # depends_on:
+    #   - api-gateway-service1
+    #   - api-gateway-service2
+
+  # Capa: Puerta de Enlace (Gateway)
+  kong-db:
+    build:
+      context: ./infraestructure/kong/infra
+      dockerfile: Dockerfile
+    image: localhost:5000/kong-db:1.0.0
+    container_name: kong-db
+    networks:
+      - kong-net
+    ports:
+      - 15432:5432
+    environment:
+      POSTGRES_USER: kong
+      POSTGRES_PASSWORD: kong
+
+  kong-migration:
+    image: kong
+    depends_on:
+      - kong-db
+    container_name: kong-migration
+    networks:
+      - kong-net
+    restart: on-failure
+    environment:
+      - KONG_DATABASE=postgres
+      - KONG_PG_HOST=kong-db
+      - KONG_PG_DATABASE=kong
+      - KONG_PG_USER=kong
+      - KONG_PG_PASSWORD=kong
+    command: kong migrations bootstrap
+
+  kong:
+    image: kong
+    container_name: kong
+    environment:
+      - LC_CTYPE=en_US.UTF-8
+      - LC_ALL=en_US.UTF-8
+      - KONG_DATABASE=postgres
+      - KONG_PG_HOST=kong-db
+      - KONG_PG_USER=kong
+      - KONG_PG_PASSWORD=kong
+      - KONG_CASSANDRA_CONTACT_POINTS=kong-db
+      - KONG_PROXY_ACCESS_LOG=/dev/stdout
+      - KONG_ADMIN_ACCESS_LOG=/dev/stdout
+      - KONG_PROXY_ERROR_LOG=/dev/stderr
+      - KONG_ADMIN_ERROR_LOG=/dev/stderr
+      - KONG_ADMIN_LISTEN=0.0.0.0:8001, 0.0.0.0:8444 ssl
+    restart: on-failure
+    ports:
+      - 8000:8000
+      - 8443:8443
+      - 8001:8001
+      - 8444:8444
+    links:
+      - kong-db:kong-db
+    networks:
+      - kong-net
+      - app-net
+    depends_on:
+      - kong-db
+      - kong-migration
+
+  konga:
+    container_name: konga
+    image: pantsel/konga
+    links:
+      - kong:kong
+    networks:
+      - kong-net
+    ports:
+      - 1337:1337
+    environment:
+      - NODE_ENV=production
+    # depends_on:
+    #   - kong
+
+  # Capa de Seguridad (Autorizacion y Autenticacion)
+  keycloak-db:
+    container_name: keycloak-db
+    build:
+      context: ./infraestructure/keycloak-service/infra/
+      dockerfile: Dockerfile
+    image: localhost:5000/keycloak-db:1.0.0
+    networks:
+      - kong-net
+    ports:
+      - 5432
+    environment:
+      - PGDATA=/var/lib/postgresql/data
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_DB=keycloak
+
+  # Capa de Seguridad (Autorizacion y Autenticacion)
+  keycloak-service:
+    container_name: keycloak-service
+    build:
+      context: ./infraestructure/keycloak-service/service/
+      dockerfile: Dockerfile
+    image: localhost:5000/keycloak-service:1.0.0
+    networks:
+      - kong-net
+    ports:
+      - 9000:9000
+      - 8080:8080
+    environment:
+      - KEYCLOAK_ADMIN=admin
+      - KEYCLOAK_ADMIN_PASSWORD=admin
+      - KC_DB=postgres
+      - KC_DB_URL=jdbc:postgresql://keycloak-db:5432/keycloak
+      - KC_DB_USERNAME=postgres
+      - KC_DB_PASSWORD=postgres
+      - KC_HOSTNAME=192.168.1.66
+      - KC_HOSTNAME_URL="http://192.168.1.66/auth"
+      - KC_PROXY=edge
+    command: ["start-dev"]
+
+  # Servicio de prueba
+  sensor-manager-test:
+    build:
+      context: ./infraestructure/keycloak-service/test/sensor-manager-service
+      dockerfile: Dockerfile
+    image: localhost:5000/sensor-manager-test:1.0.0
+    container_name: sensor-manager-test
+    ports:
+      - 8002:8080
+    networks:
+      - app-net
+      # virtual_network:
+      #   ipv4_address: 173.18.0.10
+    environment:
+      - SERVER_PORT=8080
+      - SPRING_PROFILES_ACTIVE=default
