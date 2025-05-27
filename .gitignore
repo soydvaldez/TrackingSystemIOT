@@ -54,3 +54,7 @@ process.txt
 certs
 
 volumes/
+
+.env
+**.docker-compose.env
+kong-consumer**

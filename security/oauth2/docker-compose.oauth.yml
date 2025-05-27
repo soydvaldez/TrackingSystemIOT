@@ -1,0 +1,55 @@
+# Capa de Seguridad (Autorizacion y Autenticacion IAM)
+version: "3.8"
+
+networks:
+  oauth2-net:
+    name: oauth2-net
+    driver: bridge
+
+  kong-net:
+    name: kong-net
+    driver: bridge
+
+services:
+  # infraestructura para keycloak-service
+  keycloak-db:
+    container_name: keycloak-db
+    build:
+      context: infraestructure/db/
+      dockerfile: Dockerfile
+    image: localhost:5000/keycloak-db:1.0.0
+    networks:
+      - oauth2-net
+      - kong-net
+    ports:
+      - 5432
+    environment:
+      PGDATA: ${PGDATA}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+
+  # Servidor Oauth2 para gestionar Autorizacion y Autenticacion
+  keycloak-service:
+    container_name: keycloak-service
+    build:
+      context: keycloak-services/
+      dockerfile: Dockerfile
+    image: localhost:5000/keycloak-service:1.0.0
+    networks:
+      - oauth2-net
+      - kong-net
+    ports:
+      - 9000:9000
+      - 8080:8080
+    environment:
+      KEYCLOAK_ADMIN: ${KEYCLOAK_ADMIN}
+      KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD}
+      KC_DB: ${KC_DB}
+      KC_DB_URL: ${KC_DB_URL}
+      KC_DB_USERNAME: ${KC_DB_USERNAME}
+      KC_DB_PASSWORD: ${KC_DB_PASSWORD}
+      KC_HOSTNAME: ${KC_HOSTNAME}
+      KC_HOSTNAME_URL: ${KC_HOSTNAME_URL}
+      KC_PROXY: ${KC_PROXY}
+    command: ["start-dev"]
