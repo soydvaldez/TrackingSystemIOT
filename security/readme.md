@@ -26,8 +26,8 @@ TrackingSystemIOT/    # Raíz del proyecto
 ---
 ## Arquitectura
 
-![Arquitectura del dominio](./docs/security.png)
-
+<!-- ![Arquitectura del dominio](./docs/api-gateway.png) -->
+<img src="./docs/api-gateway.png" style="width:700px; height:auto;"/>
 ---
 
 ## Ventajas de esta estructura

@@ -1,0 +1,93 @@
+version: "3.8"
+
+networks:
+  api-gateway-net:
+    name: api-gateway-net
+    driver: bridge
+
+  kong-net:
+    name: kong-net
+    driver: bridge
+
+services:
+  # Capa: Puerta de Enlace (Gateway)
+  kong-db:
+    build:
+      context: infraestructure/db/
+      dockerfile: Dockerfile
+    image: localhost:5000/kong-db:1.0.0
+    container_name: kong-db
+    networks:
+      - api-gateway-net
+      - kong-net
+    ports:
+      - 15432:5432
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+
+  kong-migration:
+    image: kong
+    depends_on:
+      - kong-db
+    container_name: kong-migration
+    networks:
+      - api-gateway-net
+      - kong-net
+    restart: on-failure
+    environment:
+      KONG_DATABASE: ${KONG_DATABASE}
+      KONG_PG_HOST: ${KONG_PG_HOST}
+      KONG_PG_DATABASE: ${KONG_PG_DATABASE}
+      KONG_PG_USER: ${KONG_PG_USER}
+      KONG_PG_PASSWORD: ${KONG_PG_PASSWORD}
+    command: kong migrations bootstrap
+
+  kong:
+    # build:
+      # context: ./security/kong/
+      # dockerfile: Dockerfile
+    image: kong
+    container_name: kong
+    environment:
+      LC_CTYPE: en_US.UTF-8
+      LC_ALL: en_US.UTF-8
+      KONG_DATABASE: ${KONG_DATABASE}
+      KONG_PG_HOST: ${KONG_PG_HOST}
+      KONG_PG_USER: ${KONG_PG_USER}
+      KONG_PG_PASSWORD: ${KONG_PG_PASSWORD}
+      KONG_CASSANDRA_CONTACT_POINTS: kong-db
+      KONG_PROXY_ACCESS_LOG: /dev/stdout
+      KONG_ADMIN_ACCESS_LOG: /dev/stdout
+      KONG_PROXY_ERROR_LOG: /dev/stderr
+      KONG_ADMIN_ERROR_LOG: /dev/stderr
+      KONG_ADMIN_LISTEN: 0.0.0.0:8001, 0.0.0.0:8444 ssl
+    restart: on-failure
+    ports:
+      - 8000:8000
+      - 8443:8443
+      - 8001:8001
+      - 8444:8444
+    links:
+      - kong-db:kong-db
+    networks:
+      - api-gateway-net
+      - kong-net
+    depends_on:
+      - kong-db
+      - kong-migration
+
+  konga:
+    container_name: konga
+    image: pantsel/konga
+    links:
+      - kong:kong
+    networks:
+      - api-gateway-net
+      - kong-net
+    ports:
+      - 1337:1337
+    environment:
+      - NODE_ENV=production
+    # depends_on:
+    #   - kong
