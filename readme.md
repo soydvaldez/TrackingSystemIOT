@@ -5,11 +5,75 @@
 ![Maven](https://img.shields.io/badge/Maven-C71A36?style=for-the-badge&logo=apache-maven&logoColor=white)
 ![Gradle](https://img.shields.io/badge/Gradle-02303A?style=for-the-badge&logo=gradle&logoColor=white)
 ![Docker](https://img.shields.io/badge/Docker-2496ED?style=for-the-badge&logo=docker&logoColor=white)
-## Descripción
 
-Este proyecto está diseñado para ingerir y procesar datos masivos de sensores IoT **(Temperatura, GPS, Humedad)**. Cada dato ingerido es procesado y almacenado en un repositorio, facilitando una gestión y análisis eficiente de los datos. 
+🧾 Descripción general
+Esta aplicación está diseñada con una arquitectura distribuida orientada a eventos para ingerir, procesar y transformar datos provenientes de múltiples fuentes, principalmente sensores IoT. También permite notificar eventos críticos a los usuarios del sistema y mantener datos confiables mediante procesos de transformación estructurados.
 
-Este sistema ademas cuenta con soporte para la gestión de sensores (alta, baja, actualización y consulta) a través de una interfaz UI web.
+📡 Productores de datos
+- Sensores IoT de temperatura
+- Sensores IoT de posición GPS
+- Sensores IoT de humedad
+- Scripts de prueba o simuladores (para entornos de desarrollo/testing)
+
+## Estructura General
+📂 Estructura del Dominio Lógico
+```bash
+TrackingSystemIOT/    # Raíz del proyecto (Dominio principal)
+│ 
+├── security/        # 1. Seguridad de la APP
+│   ├── load-balancer/     # Encargado de distribuir tráfico y aplicar primeras reglas de acceso 
+│   ├── oauth2/            # Gestión de identidad y autenticación 
+│   ├── api-gateway/       # Enrutamiento y seguridad de APIs
+│   ├── test/              # scripts para realizar pruebas de integracion entre los servicios oauth2 y el api gateway.
+│   ├── docker-compose.security.yml/   # Archivo Docker compose para gestionar volumenes,servicios, redes.
+│   └── readme.md
+│
+├── ingestion-process/                # 2. Captura de datos crudos desde dispositivos o APIs
+│   ├── IngestionService/             # Entrada principal de datos crudos (IoT, eventos)
+│   ├── EventService/                 # Procesa alertas/reglas en tiempo real
+│   ├── SensorRegistryService/        # Relaciona sensores con clientes, tipos y ubicaciones
+│   ├── docker-compose.ingestion.yml/   # Archivo Docker compose para gestionar volumenes,servicios, redes.
+│   └── readme.md
+│
+├── master-data/                      # 3. Datos de referencia para contextualizar las lecturas
+│   ├── SensorCatalogService/         # Tipos, fabricantes, modelos, métricas de sensores
+│   ├── ClientSensorService/          # Sensores físicos instalados por cliente
+│   ├── LocationService/              # Ubicaciones físicas de los sensores
+│   ├── docker-compose.master.yml/   # Archivo Docker compose para gestionar volumenes,servicios, redes.
+│   └── readme.md
+│
+├── transformation-process/ (futuro)  # 4. ETL: transforma datos crudos en datasets confiables
+│   ├── ReaderService/                # Lee datos de Ingestion DB, Kafka, S3, etc.
+│   ├── TransformationService/        # Normaliza, valida, enriquece (Spring Batch, Spark, etc.)
+│   ├── LoaderService/                # Carga en base de datos curada ("gold layer")
+│   ├── batch-jobs/                   # Definiciones de Spring Batch jobs, YAML/Java config
+│   ├── infra/                        # DB staging, configuración ETL, colas, S3
+│   ├── docker-compose.transformation.yml/   # Archivo Docker compose para gestionar volumenes,servicios, redes.
+│   └── readme.md
+│
+├── Consumption-process/ (futuro): dashboards, reportes, IA, notificaciones
+│   
+├── shared/                           # Librerías y contratos reutilizables
+│   └── libs/                         # DTOs, modelos, eventos, utils compartidos (Java libs)
+│
+├── scripts/                         # Scripts Bash de utilidad globales, pruebas de integracion entre dominios.
+│   
+├── docker-compose.yml/   # Archivo Docker compose para gestionar volumenes, servicios, redes globales de toda la aplicación.
+└── readme.md             # Documentacion global de la aplicacion
+```
+
+📦 Subdominios funcionales
+🔹 ingestion-process/
+Responsable de recibir, validar y almacenar datos crudos provenientes de los sensores. También se encarga de emitir eventos relevantes cuando las lecturas superan umbrales críticos o requieren atención inmediata.
+
+🔹 security/
+Contiene los componentes de seguridad y control de acceso. Implementa OAuth2/OpenID Connect para autenticación, y un API Gateway como único punto de entrada para exponer y proteger los servicios distribuidos de la plataforma.
+
+🔹 master-data/
+Encargado de la gestión del catálogo de sensores y su relación con clientes y ubicaciones. Ofrece operaciones de alta, baja, modificación y consulta, accesibles a través de una interfaz web (UI) o API, facilitando la administración centralizada del modelo de datos.
+
+🔹 transformation-process/
+Encargado del procesamiento de datos crudos en distintos modos: batch, micro-batch o en tiempo real, según el tipo de dato o criticidad del evento. Su objetivo es generar datasets confiables (gold layer) que sirvan para análisis, visualización y generación de valor.
 
 ### Architectura
 **Orientado a microservicios con enfoque a eventos**
