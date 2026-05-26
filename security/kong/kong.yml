@@ -1,0 +1,11 @@
+_format_version: "3.0"
+
+services:
+  - name: api
+    url: http://localhost:3000
+
+routes:
+  - name: api-route
+    service: api
+    paths:
+      - /api
