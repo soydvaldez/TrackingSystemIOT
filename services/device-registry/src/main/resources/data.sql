@@ -1,6 +1,6 @@
 INSERT INTO devices (
-    device_uuid,
-    customer_uuid,
+    external_id,
+    customer_id,
     device_name,
     device_model,
     firmware_version,

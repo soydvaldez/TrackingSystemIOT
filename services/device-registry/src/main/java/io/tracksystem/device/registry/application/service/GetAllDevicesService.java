@@ -1,9 +1,9 @@
 package io.tracksystem.device.registry.application.service;
 
-import java.util.Optional;
+import java.util.List;
 
-import io.tracksystem.device.registry.application.command.DeviceSummary;
 import io.tracksystem.device.registry.application.command.GetAllDevicesCommand;
+import io.tracksystem.device.registry.application.command.GetDeviceQuery;
 import io.tracksystem.device.registry.application.port.in.GetAllDevicesUseCase;
 import io.tracksystem.device.registry.application.port.out.LoadDevicesPort;
 
@@ -15,14 +15,10 @@ public class GetAllDevicesService implements GetAllDevicesUseCase {
     }
 
     @Override
-    public GetAllDevicesUseCase getAll(GetAllDevicesCommand command) {
-        Optional<DeviceSummary> devices = loadDevicesPort.loadAll();
+    public List<GetDeviceQuery> getAll(GetAllDevicesCommand command) {
+        List<GetDeviceQuery> devices = loadDevicesPort.loadAll();
 
-        if (devices.isPresent()) {
-
-        }
-
-        return null;
+        return devices;
     }
 
 }

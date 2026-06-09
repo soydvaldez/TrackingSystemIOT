@@ -1,4 +1,4 @@
-package io.tracksystem.device.registry.infrastructure.jpa;
+package io.tracksystem.device.registry.infrastructure.out.jpa;
 
 import java.util.UUID;
 
@@ -6,5 +6,5 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
 
 @Repository
-public interface DeviceRepository extends JpaRepository<DeviceEntity, UUID> {
+public interface DeviceRepository extends JpaRepository<JpaDeviceEntity, UUID> {
 }

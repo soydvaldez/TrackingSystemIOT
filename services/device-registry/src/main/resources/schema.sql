@@ -1,6 +1,7 @@
 CREATE TABLE devices (
-    device_uuid UUID PRIMARY KEY,
-    customer_uuid UUID NOT NULL,
+    id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    external_id UUID NOT NULL,
+    customer_id UUID NOT NULL,
     device_name VARCHAR(100) NOT NULL,
     device_model VARCHAR(100) NOT NULL,
     firmware_version VARCHAR(30) NOT NULL,
